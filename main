@@ -1,0 +1,36 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import classification_report, roc_auc_score
+
+df = pd.read_csv("online_shoppers_intention.csv")
+X, y = df.drop(columns="Revenue"), df["Revenue"]
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, stratify=y, random_state=42
+)
+
+num_cols = X.select_dtypes("number").columns
+cat_cols = X.select_dtypes(exclude="number").columns
+
+prep = ColumnTransformer([
+    ("num", Pipeline([("imp", SimpleImputer(strategy="median")),
+                      ("sc", StandardScaler())]), num_cols),
+    ("cat", OneHotEncoder(handle_unknown="ignore"), cat_cols),
+])
+
+pipe = Pipeline([("prep", prep), ("clf", LogisticRegression(max_iter=1000))])
+
+grid = GridSearchCV(
+    pipe, {"clf__C": [0.01, 0.1, 1, 10]},
+    cv=StratifiedKFold(5, shuffle=True, random_state=42),
+    scoring="roc_auc",
+)
+grid.fit(X_train, y_train)
+print(grid.best_params_, grid.best_score_)
+print(roc_auc_score(y_test, grid.predict_proba(X_test)[:, 1]))
